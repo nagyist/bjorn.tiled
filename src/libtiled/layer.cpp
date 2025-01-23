@@ -209,6 +209,7 @@ Layer *Layer::initializeClone(Layer *clone) const
     clone->mOffset = mOffset;
     clone->mParallaxFactor = mParallaxFactor;
     clone->mOpacity = mOpacity;
+    clone->mBlendMode = mBlendMode;
     clone->mTintColor = mTintColor;
     clone->mVisible = mVisible;
     clone->mLocked = mLocked;
@@ -366,7 +367,7 @@ bool LayerIterator::operator==(const LayerIterator &other) const
  * Returns the global layer index for the given \a layer. Obtained by iterating
  * the layer's map while incrementing the index until layer is found.
  */
-int globalIndex(Layer *layer)
+int globalIndex(const Layer *layer)
 {
     if (!layer)
         return -1;

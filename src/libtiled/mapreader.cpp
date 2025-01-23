@@ -307,9 +307,8 @@ std::unique_ptr<Map> MapReaderPrivate::readMap()
         mMap.reset();
     } else {
         // Try to load the tileset images for embedded tilesets
-        auto tilesets = mMap->tilesets();
-        for (SharedTileset &tileset : tilesets) {
-            if (!tileset->isCollection() && tileset->fileName().isEmpty())
+        for (const SharedTileset &tileset : mMap->tilesets()) {
+            if (tileset->fileName().isEmpty())
                 tileset->loadImage();
         }
 
@@ -893,6 +892,9 @@ static void readLayerAttributes(Layer &layer,
         parallaxFactor.setY(factorY);
 
     layer.setParallaxFactor(parallaxFactor);
+
+    const auto mode = atts.value(QLatin1String("mode")).toString();
+    layer.setBlendMode(blendModeFromString(mode));
 }
 
 std::unique_ptr<TileLayer> MapReaderPrivate::readTileLayer()
@@ -1274,13 +1276,8 @@ QPolygonF MapReaderPrivate::readPolygon()
 
     const QXmlStreamAttributes atts = xml.attributes();
     const QString points = atts.value(QLatin1String("points")).toString();
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    const QStringList pointsList = points.split(QLatin1Char(' '),
-                                                QString::SkipEmptyParts);
-#else
     const QStringList pointsList = points.split(QLatin1Char(' '),
                                                 Qt::SkipEmptyParts);
-#endif
 
     QPolygonF polygon;
     bool ok = true;
@@ -1501,7 +1498,7 @@ std::unique_ptr<Map> MapReader::readMap(const QString &fileName)
 SharedTileset MapReader::readTileset(QIODevice *device, const QString &path)
 {
     SharedTileset tileset = d->readTileset(device, path);
-    if (tileset && !tileset->isCollection())
+    if (tileset)
         tileset->loadImage();
 
     return tileset;

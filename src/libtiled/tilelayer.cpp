@@ -465,7 +465,7 @@ void TileLayer::rotateHexagonal(RotateDirection direction, Map *map)
 
     Hex newCenter(newWidth / 2, newHeight / 2, staggerIndex, staggerAxis);
 
-    /* https://github.com/bjorn/tiled/pull/1447
+    /* https://github.com/mapeditor/tiled/pull/1447
 
   0 or 15     0: None or (Rotated60 | Rotated120 | FlippedVertically | FlippedHorizontally)
      2       60: Rotated60
@@ -612,6 +612,8 @@ void TileLayer::resize(QSize size, QPoint offset)
 
     mChunks = newLayer->mChunks;
     mBounds = newLayer->mBounds;
+    mUsedTilesets = newLayer->mUsedTilesets;
+    mUsedTilesetsDirty = newLayer->mUsedTilesetsDirty;
     setSize(size);
 }
 
@@ -655,6 +657,8 @@ void TileLayer::offsetTiles(QPoint offset,
 
     mChunks = newLayer->mChunks;
     mBounds = newLayer->mBounds;
+    mUsedTilesets = newLayer->mUsedTilesets;
+    mUsedTilesetsDirty = newLayer->mUsedTilesetsDirty;
 }
 
 void TileLayer::offsetTiles(QPoint offset)

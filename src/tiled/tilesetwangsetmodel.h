@@ -30,6 +30,7 @@ namespace Tiled {
 
 class Tileset;
 
+class ChangeEvent;
 class TilesetDocument;
 
 /**
@@ -94,7 +95,10 @@ signals:
     void wangSetChanged(WangSet *wangSet);
 
 private:
+    void documentChanged(const ChangeEvent &event);
+
     void emitWangSetChange(WangSet *wangSet);
+    void emitToTilesetAndMaps(const ChangeEvent &event);
 
     TilesetDocument *mTilesetDocument;
 };

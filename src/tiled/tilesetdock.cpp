@@ -308,8 +308,8 @@ void TilesetDock::setMapDocument(MapDocument *mapDocument)
         return;
 
     // Hide while we update the tab bar, to avoid repeated layouting
-    // But, this causes problems on OS X (issue #1055)
-#ifndef Q_OS_OSX
+    // But, this causes problems on macOS (issue #1055)
+#ifndef Q_OS_MACOS
     widget()->hide();
 #endif
 
@@ -325,9 +325,7 @@ void TilesetDock::setMapDocument(MapDocument *mapDocument)
     mTilesetDocumentsFilterModel->setMapDocument(mapDocument);
 
     if (mMapDocument) {
-        if (Object *object = mMapDocument->currentObject())
-            if (object->typeId() == Object::TileType)
-                setCurrentTile(static_cast<Tile*>(object));
+        restoreCurrentTile();
 
         connect(mMapDocument, &MapDocument::tilesetAdded,
                 this, &TilesetDock::updateActions);
@@ -339,7 +337,7 @@ void TilesetDock::setMapDocument(MapDocument *mapDocument)
 
     updateActions();
 
-#ifndef Q_OS_OSX
+#ifndef Q_OS_MACOS
     widget()->show();
 #endif
 }
@@ -460,8 +458,10 @@ void TilesetDock::onCurrentTilesetChanged()
 
     view->zoomable()->setComboBox(mZoomComboBox);
 
-    if (const QItemSelectionModel *s = view->selectionModel())
+    if (const QItemSelectionModel *s = view->selectionModel()) {
+        QScopedValueRollback<bool> noChangeCurrentObject(mNoChangeCurrentObject, true);
         setCurrentTile(view->tilesetModel()->tileAt(s->currentIndex()));
+    }
 
     mDynamicWrappingToggle->setChecked(view->dynamicWrapping());
 
@@ -483,6 +483,19 @@ void TilesetDock::currentChanged(const QModelIndex &index)
 
     const TilesetModel *model = static_cast<const TilesetModel*>(index.model());
     setCurrentTile(model->tileAt(index));
+}
+
+void TilesetDock::restoreCurrentTile()
+{
+    if (!mMapDocument)
+        return;
+
+    if (auto view = currentTilesetView()) {
+        if (view->model()) {
+            QScopedValueRollback<bool> noChangeCurrentObject(mNoChangeCurrentObject, true);
+            currentChanged(view->selectionModel()->currentIndex());
+        }
+    }
 }
 
 void TilesetDock::updateActions()
@@ -829,7 +842,7 @@ void TilesetDock::setCurrentTile(Tile *tile)
     mCurrentTile = tile;
     emit currentTileChanged(tile);
 
-    if (mMapDocument && tile) {
+    if (mMapDocument && tile && !mNoChangeCurrentObject) {
         int tilesetIndex = indexOfTileset(tile->tileset());
         if (tilesetIndex != -1)
             mMapDocument->setCurrentObject(tile, mTilesetDocuments.at(tilesetIndex));
@@ -937,9 +950,8 @@ void TilesetDock::tabContextMenuRequested(const QPoint &pos)
     QMenu menu;
 
     auto tilesetDocument = mTilesetDocuments.at(index);
-    const QString fileName = tilesetDocument->fileName();
 
-    Utils::addFileManagerActions(menu, fileName);
+    Utils::addFileManagerActions(menu, tilesetDocument->fileName());
 
     menu.addSeparator();
     menu.addAction(mEditTileset->icon(), mEditTileset->text(), this, [tileset = tilesetDocument->tileset()] {

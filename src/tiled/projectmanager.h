@@ -34,12 +34,13 @@ class ProjectModel;
  *
  * No dependencies.
  */
-class ProjectManager : public QObject
+class TILED_EDITOR_EXPORT ProjectManager : public QObject
 {
     Q_OBJECT
 
 public:
     explicit ProjectManager(QObject *parent = nullptr);
+    ~ProjectManager() override;
 
     static ProjectManager *instance();
 

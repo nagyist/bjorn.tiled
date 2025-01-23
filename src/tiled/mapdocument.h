@@ -67,7 +67,7 @@ using MapDocumentPtr = QSharedPointer<MapDocument>;
  * selected layer and provides an API for adding and removing map objects. It
  * also owns the QUndoStack.
  */
-class TILED_EDITOR_EXPORT MapDocument : public Document
+class TILED_EDITOR_EXPORT MapDocument final : public Document
 {
     Q_OBJECT
 
@@ -84,13 +84,16 @@ public:
     /**
      * Constructs a map document around the given map.
      */
-    MapDocument(std::unique_ptr<Map> map);
+    explicit MapDocument(std::unique_ptr<Map> map);
 
     ~MapDocument() override;
 
     MapDocumentPtr sharedFromThis() { return qSharedPointerCast<MapDocument>(Document::sharedFromThis()); }
 
     bool save(const QString &fileName, QString *error = nullptr) override;
+
+    bool canReload() const override;
+    bool reload(QString *error);
 
     /**
      * Loads a map and returns a MapDocument instance on success. Returns null
@@ -178,6 +181,10 @@ public:
     void paintTileLayers(const Map &map, bool mergeable = false,
                          QVector<SharedTileset> *missingTilesets = nullptr,
                          QHash<TileLayer *, QRegion> *paintedRegions = nullptr);
+    void eraseTileLayers(const QRegion &region,
+                         bool allLayers = false,
+                         bool mergeable = false,
+                         const QString &customName = QString());
 
     void replaceObjectTemplate(const ObjectTemplate *oldObjectTemplate,
                                const ObjectTemplate *newObjectTemplate);
@@ -260,6 +267,8 @@ public:
 
     void checkIssues() override;
 
+    void swapMap(std::unique_ptr<Map> &other);
+
     QSet<int> expandedGroupLayers;
     QSet<int> expandedObjectLayers;
 
@@ -313,9 +322,9 @@ signals:
     void mapObjectPicked(MapObject *object);
 
     /**
-     * Emitted when the map size or its tile size changes.
+     * Emitted when the map size changes.
      */
-    void mapChanged();
+    void mapResized();
 
     void layerAdded(Layer *layer);
     void layerAboutToBeRemoved(GroupLayer *parentLayer, int index);

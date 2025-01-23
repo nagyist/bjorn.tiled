@@ -25,7 +25,7 @@ Tiled supports the following basic property types:
 
 -  **bool** (true or false)
 -  **color** (a 32-bit color value)
--  **file** (a relative path referencing a file)
+-  **file** (a file reference, which is saved as a relative path)
 -  **float** (a floating point number)
 -  **int** (a whole number)
 -  **object** (a reference to an object) - *Since Tiled 1.4*
@@ -170,12 +170,12 @@ those values if you need to.
       minimum or maximum value, the precision or a different default value.
 
    -  **Array properties**, which would be properties having a list of
-      values (`#1493 <https://github.com/bjorn/tiled/issues/1493>`__).
+      values (`#1493 <https://github.com/mapeditor/tiled/issues/1493>`__).
 
    Apart from predefining properties based on object type, I'd like to add
    support for **predefining the properties for each data type**. So
    defining which custom properties are valid for maps, tilesets, layers,
-   etc. (`#1410 <https://github.com/bjorn/tiled/issues/1410>`__)
+   etc. (`#1410 <https://github.com/mapeditor/tiled/issues/1410>`__)
 
    If you like any of these plans, please help me getting around to it
    faster by `sponsoring Tiled development <https://www.mapeditor.org/donate>`__. The

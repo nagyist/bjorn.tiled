@@ -108,6 +108,8 @@ public:
 
     void moveObjects(ObjectGroup *og, int from, int to, int count);
 
+    QIcon objectGroupIcon() const;
+
 private:
     void layerAdded(Layer *layer);
     void layerAboutToBeRemoved(GroupLayer *groupLayer, int index);
@@ -118,8 +120,9 @@ private:
                          const QVarLengthArray<Column, 3> &columns,
                          const QVector<int> &roles = QVector<int>());
 
-    MapDocument *mMapDocument;
-    Map *mMap;
+    Map *map() const;
+
+    MapDocument *mMapDocument = nullptr;
 
     // cache
     mutable QMap<GroupLayer*, QList<Layer*>> mFilteredLayers;
@@ -127,5 +130,10 @@ private:
 
     QIcon mObjectGroupIcon;
 };
+
+inline QIcon MapObjectModel::objectGroupIcon() const
+{
+    return mObjectGroupIcon;
+}
 
 } // namespace Tiled

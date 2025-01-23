@@ -24,6 +24,7 @@
 #include "actionmanager.h"
 #include "addremovelayer.h"
 #include "addremovemapobject.h"
+#include "changeevents.h"
 #include "changeselectedarea.h"
 #include "clipboardmanager.h"
 #include "documentmanager.h"
@@ -32,6 +33,7 @@
 #include "map.h"
 #include "mapdocument.h"
 #include "mapobject.h"
+#include "mapobjectmodel.h"
 #include "maprenderer.h"
 #include "mapview.h"
 #include "movelayer.h"
@@ -296,8 +298,12 @@ void MapDocumentActionHandler::setMapDocument(MapDocument *mapDocument)
                 this, &MapDocumentActionHandler::updateActions);
         connect(mapDocument, &MapDocument::selectedObjectsChanged,
                 this, &MapDocumentActionHandler::updateActions);
-        connect(mapDocument, &MapDocument::mapChanged,
-                this, &MapDocumentActionHandler::updateActions);
+        connect(mapDocument, &MapDocument::changed,
+                this, [this] (const ChangeEvent &change) {
+            if (change.type == ChangeEvent::MapChanged)
+                if (static_cast<const MapChangeEvent&>(change).property == Map::InfiniteProperty)
+                    updateActions();
+        });
     }
 }
 
@@ -330,6 +336,43 @@ QMenu *MapDocumentActionHandler::createGroupLayerMenu(QWidget *parent) const
     groupLayerMenu->addAction(actionUngroupLayers());
 
     return groupLayerMenu;
+}
+
+void MapDocumentActionHandler::populateMoveToLayerMenu(QMenu *menu, const ObjectGroup *current)
+{
+    if (!mMapDocument)
+        return;
+
+    const GroupLayer *parentLayer = nullptr;
+
+    LayerIterator objectGroupsIterator(mMapDocument->map(), Layer::ObjectGroupType);
+    objectGroupsIterator.toBack();
+
+    const auto objectGroupIcon = mMapDocument->mapObjectModel()->objectGroupIcon();
+
+    while (auto objectGroup = static_cast<ObjectGroup*>(objectGroupsIterator.previous())) {
+        // Create a separator to indicate the parent layer(s), using "(Parent1/Parent2)".
+        if (parentLayer != objectGroup->parentLayer()) {
+            auto separator = menu->addSeparator();
+            separator->setEnabled(false);
+
+            parentLayer = objectGroup->parentLayer();
+            if (parentLayer) {
+                QStringList parentLayerNames;
+                auto currentParentLayer = parentLayer;
+                while (currentParentLayer) {
+                    parentLayerNames.prepend(currentParentLayer->name());
+                    currentParentLayer = currentParentLayer->parentLayer();
+                }
+
+                separator->setText(parentLayerNames.join(QLatin1String("/")));
+            }
+        }
+
+        QAction *action = menu->addAction(objectGroupIcon, objectGroup->name());
+        action->setData(QVariant::fromValue(objectGroup));
+        action->setEnabled(objectGroup != current);
+    }
 }
 
 /**
@@ -427,6 +470,8 @@ void MapDocumentActionHandler::delete_()
     }
 
     for (auto &erased : std::as_const(erasedRegions)) {
+        // Sanity check needed because a script might respond to the below
+        // signal by removing the layer from the map.
         if (erased.second->map() != mMapDocument->map())
             continue;
 

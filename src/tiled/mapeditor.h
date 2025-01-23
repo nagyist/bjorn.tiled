@@ -73,9 +73,9 @@ class MapEditor final : public Editor
     Q_OBJECT
 
     Q_PROPERTY(Tiled::TilesetDock *tilesetsView READ tilesetDock CONSTANT)
-    Q_PROPERTY(Tiled::EditableMap *currentBrush READ currentBrush WRITE setCurrentBrush)
-    Q_PROPERTY(Tiled::EditableWangSet *currentWangSet READ currentWangSet NOTIFY currentWangSetChanged)
-    Q_PROPERTY(int currentWangColorIndex READ currentWangColorIndex NOTIFY currentWangColorIndexChanged)
+    Q_PROPERTY(Tiled::EditableMap *currentBrush READ currentBrush WRITE setCurrentBrush NOTIFY currentBrushChanged)
+    Q_PROPERTY(Tiled::EditableWangSet *currentWangSet READ currentWangSet WRITE setCurrentWangSet NOTIFY currentWangSetChanged)
+    Q_PROPERTY(int currentWangColorIndex READ currentWangColorIndex WRITE setCurrentWangColorIndex NOTIFY currentWangColorIndexChanged)
     Q_PROPERTY(Tiled::MapView *currentMapView READ currentMapView CONSTANT)
 
 public:
@@ -120,7 +120,10 @@ public:
     void setCurrentBrush(EditableMap *editableMap);
 
     EditableWangSet *currentWangSet() const;
+    void setCurrentWangSet(EditableWangSet *wangSet);
+
     int currentWangColorIndex() const;
+    void setCurrentWangColorIndex(int newIndex);
 
     void addExternalTilesets(const QStringList &fileNames);
 
@@ -130,6 +133,7 @@ public:
     AbstractTool *selectedTool() const;
 
 signals:
+    void currentBrushChanged();
     void currentWangSetChanged();
     void currentWangColorIndexChanged(int colorIndex);
 

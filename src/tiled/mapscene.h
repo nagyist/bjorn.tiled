@@ -65,6 +65,7 @@ public:
     void setShowTileCollisionShapes(bool enabled);
     void setParallaxEnabled(bool enabled);
     void setPainterScale(qreal painterScale);
+    void setSuppressMouseMoveEvents(bool suppress);
 
     QRectF mapBoundingRect() const;
 
@@ -111,7 +112,6 @@ private:
     void refreshScene();
 
     void changeEvent(const ChangeEvent &change);
-    void mapChanged();
     void repaintTileset(Tileset *tileset);
 
     void tilesetReplaced(int index, Tileset *tileset, Tileset *oldTileset);
@@ -127,16 +127,21 @@ private:
 
     bool eventFilter(QObject *object, QEvent *event) override;
 
+    bool toolMouseMoved(const QPointF &pos, Qt::KeyboardModifiers modifiers);
+
     MapDocument *mMapDocument = nullptr;
-    QHash<Map*, MapItem*> mMapItems;
+    QHash<MapDocument*, MapItem*> mMapItems;
     AbstractTool *mSelectedTool = nullptr;
     DebugDrawItem *mDebugDrawItem = nullptr;
     bool mUnderMouse = false;
     bool mShowTileCollisionShapes = false;
     bool mParallaxEnabled = true;
     bool mWorldsEnabled = true;
+    bool mSuppressMouseMoveEvents = false;
+    bool mMouseMoveEventSuppressed = false;
     Session::CallbackIterator mEnableWorldsCallback;
-    Qt::KeyboardModifiers mCurrentModifiers = Qt::NoModifier;
+    Qt::KeyboardModifiers mToolModifiers = Qt::NoModifier;
+    Qt::KeyboardModifiers mLastModifiers = Qt::NoModifier;
     QPointF mLastMousePos;
     QRectF mViewRect;
     QColor mDefaultBackgroundColor;
@@ -156,7 +161,7 @@ inline MapDocument *MapScene::mapDocument() const
  */
 inline MapItem *MapScene::mapItem(MapDocument *mapDocument) const
 {
-    return mapDocument ? mMapItems.value(mapDocument->map()) : nullptr;
+    return mapDocument ? mMapItems.value(mapDocument) : nullptr;
 }
 
 inline DebugDrawItem *MapScene::debugDrawItem() const

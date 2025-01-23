@@ -1,6 +1,6 @@
 /*
  * projectdocument.cpp
- * Copyright 2023, Chris Boehm AKA dogboydog
+ * Copyright 2023, dogboydog
  * Copyright 2023, Thorbjørn Lindeijer <bjorn@lindeijer.nl>
  *
  * This file is part of Tiled.
@@ -35,6 +35,13 @@ ProjectDocument::ProjectDocument(std::unique_ptr<Project> project, QObject *pare
 
     connect(undoStack(), &QUndoStack::indexChanged,
             this, [this] { mProject->save(); });
+}
+
+ProjectDocument::~ProjectDocument()
+{
+    // The Editable needs to be deleted before the Project, otherwise ~Object()
+    // will delete it, whereas the editable is actually owned by the Document.
+    mEditable.reset();
 }
 
 QString ProjectDocument::displayName() const

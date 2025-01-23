@@ -92,6 +92,7 @@ private:
     void showVersion();
     void justQuit();
     void setDisableOpenGL();
+    void setProject();
     void setExportMap();
     void setExportTileset();
     void setExportEmbedTilesets();
@@ -118,6 +119,16 @@ private:
 
 static void initializePluginsAndExtensions()
 {
+    // Load the project without restoring the session
+    if (!Preferences::startupProject().isEmpty()) {
+        if (auto project = Project::load(Preferences::startupProject())) {
+            ProjectManager::instance()->setProject(std::move(project));
+        } else {
+            qWarning().noquote() << QCoreApplication::translate("Command line", "Failed to load project '%1'.")
+                                    .arg(Preferences::startupProject());
+        }
+    }
+
     PluginManager::instance()->loadPlugins();
     ScriptManager::instance().ensureInitialized();
 }
@@ -193,6 +204,11 @@ CommandLineHandler::CommandLineHandler()
                 QLatin1String("--disable-opengl"),
                 tr("Disable hardware accelerated rendering"));
 
+    option<&CommandLineHandler::setProject>(
+                QChar(),
+                QLatin1String("--project"),
+                tr("Project file to load"));
+
     option<&CommandLineHandler::setExportMap>(
                 QChar(),
                 QLatin1String("--export-map"),
@@ -262,6 +278,22 @@ void CommandLineHandler::justQuit()
 void CommandLineHandler::setDisableOpenGL()
 {
     disableOpenGL = true;
+}
+
+void CommandLineHandler::setProject()
+{
+    const QString projectFile = nextArgument();
+    const QFileInfo fileInfo(projectFile);
+
+    if (fileInfo.suffix() != QLatin1String("tiled-project")) {
+        qWarning().noquote() << QCoreApplication::translate("Command line", "Project file expected: --project <.tiled-project file>");
+        justQuit();
+    } else if (!fileInfo.exists()) {
+        qWarning().noquote() << QCoreApplication::translate("Command line", "Project file '%1' not found.").arg(projectFile);
+        justQuit();
+    } else {
+        Preferences::setStartupProject(QDir::cleanPath(fileInfo.absoluteFilePath()));
+    }
 }
 
 void CommandLineHandler::setExportMap()
@@ -357,13 +389,9 @@ void CommandLineHandler::evaluateScript()
     for (QString argument = nextArgument(); !argument.isNull(); argument = nextArgument())
         arguments.append(argument);
 
-    ScriptManager &scriptManager = ScriptManager::instance();
-
     static bool initialized = false;
     if (!initialized) {
         initialized = true;
-
-        PluginManager::instance()->loadPlugins();
 
         // Output messages to command-line
         auto& logger = LoggingInterface::instance();
@@ -371,9 +399,10 @@ void CommandLineHandler::evaluateScript()
         QObject::connect(&logger, &LoggingInterface::warning, [] (const QString &message) { qWarning() << message; });
         QObject::connect(&logger, &LoggingInterface::error, [] (const QString &message) { qWarning() << message; });
 
-        scriptManager.ensureInitialized();
+        initializePluginsAndExtensions();
     }
 
+    ScriptManager &scriptManager = ScriptManager::instance();
     scriptManager.setScriptArguments(arguments);
     scriptManager.evaluateFileOrLoadModule(scriptFile);
 }
@@ -395,13 +424,11 @@ int main(int argc, char *argv[])
     }
 #endif
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::RoundPreferFloor);
 
     // High-DPI scaling is always enabled in Qt 6
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-#endif
 #endif
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -415,7 +442,7 @@ int main(int argc, char *argv[])
     QCoreApplication::setAttribute(Qt::AA_DisableWindowContextHelpButton);
 #endif
 
-#ifdef Q_OS_MAC
+#if defined(Q_OS_MAC) && QT_VERSION < QT_VERSION_CHECK(6, 7, 3)
     QCoreApplication::setAttribute(Qt::AA_DontShowIconsInMenus);
 #endif
 
@@ -489,6 +516,9 @@ int main(int argc, char *argv[])
 
         if (!success) {
             qWarning().noquote() << QCoreApplication::translate("Command line", "Failed to export map to target file.");
+            errorMsg = outputFormat->errorString();
+            if (!errorMsg.isEmpty())
+                qWarning().noquote() << errorMsg;
             return 1;
         }
         return 0;
@@ -534,6 +564,9 @@ int main(int argc, char *argv[])
 
         if (!success) {
             qWarning().noquote() << QCoreApplication::translate("Command line", "Failed to export tileset to target file.");
+            errorMsg = outputFormat->errorString();
+            if (!errorMsg.isEmpty())
+                qWarning().noquote() << errorMsg;
             return 1;
         }
         return 0;

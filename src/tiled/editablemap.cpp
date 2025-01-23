@@ -49,25 +49,16 @@
 namespace Tiled {
 
 EditableMap::EditableMap(QObject *parent)
-    : EditableAsset(nullptr, new Map(), parent)
+    : EditableAsset(new Map(), parent)
 {
     mDetachedMap.reset(map());
 }
 
 EditableMap::EditableMap(MapDocument *mapDocument, QObject *parent)
-    : EditableAsset(mapDocument, mapDocument->map(), parent)
+    : EditableAsset(mapDocument->map(), parent)
     , mSelectedArea(new EditableSelectedArea(mapDocument, this))
 {
-    connect(mapDocument, &Document::fileNameChanged, this, &EditableAsset::fileNameChanged);
-    connect(mapDocument, &Document::changed, this, &EditableMap::documentChanged);
-    connect(mapDocument, &MapDocument::layerAdded, this, &EditableMap::attachLayer);
-    connect(mapDocument, &MapDocument::layerRemoved, this, &EditableMap::detachLayer);
-
-    connect(mapDocument, &MapDocument::currentLayerChanged, this, &EditableMap::currentLayerChanged);
-    connect(mapDocument, &MapDocument::selectedLayersChanged, this, &EditableMap::selectedLayersChanged);
-    connect(mapDocument, &MapDocument::selectedObjectsChanged, this, &EditableMap::selectedObjectsChanged);
-
-    connect(mapDocument, &MapDocument::regionEdited, this, &EditableMap::onRegionEdited);
+    setDocument(mapDocument);
 }
 
 /**
@@ -76,14 +67,13 @@ EditableMap::EditableMap(MapDocument *mapDocument, QObject *parent)
  * The map's lifetime must exceed that of the EditableMap instance.
  */
 EditableMap::EditableMap(const Map *map, QObject *parent)
-    : EditableAsset(nullptr, const_cast<Map*>(map), parent)
+    : EditableAsset(const_cast<Map*>(map), parent)
     , mReadOnly(true)
-    , mSelectedArea(nullptr)
 {
 }
 
 EditableMap::EditableMap(std::unique_ptr<Map> map, QObject *parent)
-    : EditableAsset(nullptr, map.get(), parent)
+    : EditableAsset(map.get(), parent)
     , mDetachedMap(std::move(map))
 {
 }
@@ -449,7 +439,7 @@ void EditableMap::autoMap(const RegionValueType &region, const QString &rulesFil
         manager.autoMapRegion(region.region());
 }
 
-Tiled::ScriptImage *EditableMap::toImage(QSize size)
+Tiled::ScriptImage *EditableMap::toImage(QSize size) const
 {
     const MiniMapRenderer miniMapRenderer(map());
     const QSize imageSize = size.isValid() ? size : miniMapRenderer.mapSize();
@@ -505,7 +495,7 @@ void EditableMap::setSize(int width, int height)
 void EditableMap::setTileWidth(int value)
 {
     if (auto doc = mapDocument())
-        push(new ChangeMapProperty(doc, Map::TileWidthProperty, value));
+        push(new ChangeMapTileSize(doc, QSize(value, tileHeight())));
     else if (!checkReadOnly())
         map()->setTileWidth(value);
 }
@@ -513,7 +503,7 @@ void EditableMap::setTileWidth(int value)
 void EditableMap::setTileHeight(int value)
 {
     if (auto doc = mapDocument())
-        push(new ChangeMapProperty(doc, Map::TileHeightProperty, value));
+        push(new ChangeMapTileSize(doc, QSize(tileWidth(), value)));
     else if (!checkReadOnly())
         map()->setTileHeight(value);
 }
@@ -538,7 +528,7 @@ void EditableMap::setTileSize(int width, int height)
 void EditableMap::setInfinite(bool value)
 {
     if (auto doc = mapDocument())
-        push(new ChangeMapProperty(doc, Map::InfiniteProperty, value));
+        push(new ChangeMapInfinite(doc, value));
     else if (!checkReadOnly())
         map()->setInfinite(value);
 }
@@ -546,7 +536,7 @@ void EditableMap::setInfinite(bool value)
 void EditableMap::setHexSideLength(int value)
 {
     if (auto doc = mapDocument())
-        push(new ChangeMapProperty(doc, Map::HexSideLengthProperty, value));
+        push(new ChangeMapHexSideLength(doc, value));
     else if (!checkReadOnly())
         map()->setHexSideLength(value);
 }
@@ -554,7 +544,7 @@ void EditableMap::setHexSideLength(int value)
 void EditableMap::setStaggerAxis(StaggerAxis value)
 {
     if (auto doc = mapDocument())
-        push(new ChangeMapProperty(doc, static_cast<Map::StaggerAxis>(value)));
+        push(new ChangeMapStaggerAxis(doc, static_cast<Map::StaggerAxis>(value)));
     else if (!checkReadOnly())
         map()->setStaggerAxis(static_cast<Map::StaggerAxis>(value));
 }
@@ -562,7 +552,7 @@ void EditableMap::setStaggerAxis(StaggerAxis value)
 void EditableMap::setStaggerIndex(StaggerIndex value)
 {
     if (auto doc = mapDocument())
-        push(new ChangeMapProperty(doc, static_cast<Map::StaggerIndex>(value)));
+        push(new ChangeMapStaggerIndex(doc, static_cast<Map::StaggerIndex>(value)));
     else if (!checkReadOnly())
         map()->setStaggerIndex(static_cast<Map::StaggerIndex>(value));
 }
@@ -570,7 +560,7 @@ void EditableMap::setStaggerIndex(StaggerIndex value)
 void EditableMap::setParallaxOrigin(const QPointF &parallaxOrigin)
 {
     if (auto doc = mapDocument())
-        push(new ChangeMapProperty(doc, parallaxOrigin));
+        push(new ChangeMapParallaxOrigin(doc, parallaxOrigin));
     else if (!checkReadOnly())
         map()->setParallaxOrigin(parallaxOrigin);
 }
@@ -578,7 +568,7 @@ void EditableMap::setParallaxOrigin(const QPointF &parallaxOrigin)
 void EditableMap::setOrientation(Orientation value)
 {
     if (auto doc = mapDocument()) {
-        push(new ChangeMapProperty(doc, static_cast<Map::Orientation>(value)));
+        push(new ChangeMapOrientation(doc, static_cast<Map::Orientation>(value)));
     } else if (!checkReadOnly()) {
         map()->setOrientation(static_cast<Map::Orientation>(value));
         mRenderer.reset();
@@ -588,7 +578,7 @@ void EditableMap::setOrientation(Orientation value)
 void EditableMap::setRenderOrder(RenderOrder value)
 {
     if (auto doc = mapDocument())
-        push(new ChangeMapProperty(doc, static_cast<Map::RenderOrder>(value)));
+        push(new ChangeMapRenderOrder(doc, static_cast<Map::RenderOrder>(value)));
     else if (!checkReadOnly())
         map()->setRenderOrder(static_cast<Map::RenderOrder>(value));
 }
@@ -596,7 +586,7 @@ void EditableMap::setRenderOrder(RenderOrder value)
 void EditableMap::setBackgroundColor(const QColor &value)
 {
     if (auto doc = mapDocument())
-        push(new ChangeMapProperty(doc, value));
+        push(new ChangeMapBackgroundColor(doc, value));
     else if (!checkReadOnly())
         map()->setBackgroundColor(value);
 }
@@ -604,7 +594,7 @@ void EditableMap::setBackgroundColor(const QColor &value)
 void EditableMap::setLayerDataFormat(LayerDataFormat value)
 {
     if (auto doc = mapDocument())
-        push(new ChangeMapProperty(doc, static_cast<Map::LayerDataFormat>(value)));
+        push(new ChangeMapLayerDataFormat(doc, static_cast<Map::LayerDataFormat>(value)));
     else if (!checkReadOnly())
         map()->setLayerDataFormat(static_cast<Map::LayerDataFormat>(value));
 }
@@ -677,14 +667,47 @@ QSharedPointer<Document> EditableMap::createDocument()
 
     mSelectedArea = new EditableSelectedArea(document.data(), this);
 
-    QQmlEngine::setObjectOwnership(this, QQmlEngine::CppOwnership);
+    moveOwnershipToCpp();
 
     return document;
+}
+
+void EditableMap::setDocument(Document *document)
+{
+    Q_ASSERT(!document || document->type() == Document::MapDocumentType);
+
+    if (this->document() == document)
+        return;
+
+    EditableAsset::setDocument(document);
+
+    if (auto doc = mapDocument()) {
+        connect(doc, &Document::fileNameChanged, this, &EditableAsset::fileNameChanged);
+        connect(doc, &Document::changed, this, &EditableMap::documentChanged);
+        connect(doc, &MapDocument::layerAdded, this, &EditableMap::attachLayer);
+        connect(doc, &MapDocument::layerRemoved, this, &EditableMap::detachLayer);
+
+        connect(doc, &MapDocument::currentLayerChanged, this, &EditableMap::currentLayerChanged);
+        connect(doc, &MapDocument::selectedLayersChanged, this, &EditableMap::selectedLayersChanged);
+        connect(doc, &MapDocument::selectedObjectsChanged, this, &EditableMap::selectedObjectsChanged);
+
+        connect(doc, &MapDocument::regionEdited, this, &EditableMap::onRegionEdited);
+    }
 }
 
 void EditableMap::documentChanged(const ChangeEvent &change)
 {
     switch (change.type) {
+    case ChangeEvent::DocumentAboutToReload:
+        for (Layer *layer : map()->layers())
+            detachLayer(layer);
+
+        mRenderer.reset();
+        setObject(nullptr);
+        break;
+    case ChangeEvent::DocumentReloaded:
+        setObject(mapDocument()->map());
+        break;
     case ChangeEvent::MapChanged:
         if (static_cast<const MapChangeEvent&>(change).property == Map::OrientationProperty)
             mRenderer.reset();

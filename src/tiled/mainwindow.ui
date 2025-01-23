@@ -209,6 +209,7 @@
      <property name="title">
       <string>&amp;Unload World</string>
      </property>
+     <addaction name="actionUnloadAllWorlds"/>
     </widget>
     <widget class="QMenu" name="menuSaveWorld">
      <property name="title">
@@ -343,7 +344,7 @@
     <string>Save &amp;As...</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+Alt+S</string>
+    <string notr="true">Ctrl+Shift+S</string>
    </property>
   </action>
   <action name="actionNewTileset">
@@ -535,9 +536,6 @@
   <action name="actionSaveAll">
    <property name="text">
     <string>Save All</string>
-   </property>
-   <property name="shortcut">
-    <string notr="true">Ctrl+Shift+S</string>
    </property>
   </action>
   <action name="actionDocumentation">
@@ -802,6 +800,11 @@
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Shift+P</string>
+   </property>
+  </action>
+  <action name="actionUnloadAllWorlds">
+   <property name="text">
+    <string>Unload All Worlds</string>
    </property>
   </action>
  </widget>

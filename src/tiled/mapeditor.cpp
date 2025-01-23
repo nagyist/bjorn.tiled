@@ -50,7 +50,7 @@
 #include "objectreferencetool.h"
 #include "objectsdock.h"
 #include "objectselectiontool.h"
-#include "objecttemplate.h"
+#include "objecttemplate.h"         // used when compiling against Qt 5
 #include "preferences.h"
 #include "propertiesdock.h"
 #include "reversingproxymodel.h"
@@ -73,10 +73,9 @@
 #include "undodock.h"
 #include "wangbrush.h"
 #include "wangdock.h"
-#include "wangset.h"
 #include "zoomable.h"
-#include "worldmovemaptool.h"
 #include "worldmanager.h"
+#include "worldmovemaptool.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -207,7 +206,7 @@ MapEditor::MapEditor(QObject *parent)
     mToolsToolBar->addAction(mToolManager->registerTool(new LayerOffsetTool(this)));
     mToolsToolBar->addSeparator();  // todo: hide when there are no tool extensions
 
-    const auto tools = PluginManager::instance()->objects<AbstractTool>();
+    const auto tools = PluginManager::objects<AbstractTool>();
     for (auto tool : tools)
         mToolsToolBar->addAction(mToolManager->registerTool(tool));
 
@@ -282,7 +281,7 @@ MapEditor::MapEditor(QObject *parent)
     connect(mWangDock, &WangDock::wangColorChanged,
             mWangBrush, &WangBrush::setColor);
     connect(mWangBrush, &WangBrush::colorCaptured,
-            mWangDock, &WangDock::onColorCaptured);
+            mWangDock, &WangDock::setCurrentWangColor);
 
     connect(mTileStampsDock, &TileStampsDock::setStamp,
             this, &MapEditor::setStamp);
@@ -784,6 +783,8 @@ void MapEditor::setStamp(const TileStamp &stamp)
         mToolManager->selectTool(mStampBrush);
 
     mTilesetDock->selectTilesInStamp(stamp);
+
+    emit currentBrushChanged();
 }
 
 void MapEditor::selectWangBrush()
@@ -1066,9 +1067,31 @@ EditableWangSet *MapEditor::currentWangSet() const
     return EditableWangSet::get(mWangDock->currentWangSet());
 }
 
+void MapEditor::setCurrentWangSet(EditableWangSet *wangSet)
+{
+    if (!wangSet) {
+        ScriptManager::instance().throwNullArgError(0);
+        return;
+    }
+    mWangDock->setCurrentWangSet(wangSet->wangSet());
+}
+
 int MapEditor::currentWangColorIndex() const
 {
     return mWangDock->currentWangColor();
+}
+
+void MapEditor::setCurrentWangColorIndex(int newIndex)
+{
+    if (!mWangDock->currentWangSet()) {
+        ScriptManager::instance().throwError(QCoreApplication::translate("Script Errors", "No current Wang set"));
+        return;
+    }
+    if (newIndex < 0 || newIndex > mWangDock->currentWangSet()->colorCount()) {
+        ScriptManager::instance().throwError(QCoreApplication::translate("Script Errors", "An invalid index was provided"));
+        return;
+    }
+    mWangDock->setCurrentWangColor(newIndex);
 }
 
 AbstractTool *MapEditor::selectedTool() const

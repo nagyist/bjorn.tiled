@@ -27,7 +27,6 @@
 #include "mapdocument.h"
 #include "mapobject.h"
 #include "projectmanager.h"
-#include "worlddocument.h"
 #include "worldmanager.h"
 
 #include <QAction>
@@ -72,7 +71,7 @@ static QString replaceVariables(const QString &string, bool quoteValues = true)
 
     // Perform variable replacement
     if (Document *document = DocumentManager::instance()->currentDocument()) {
-        const QString fileName = document->fileName();
+        const QString &fileName = document->fileName();
         QFileInfo fileInfo(fileName);
         const QString mapPath = fileInfo.absolutePath();
         const QString projectPath = QFileInfo(ProjectManager::instance()->project().fileName()).absolutePath();
@@ -106,8 +105,8 @@ static QString replaceVariables(const QString &string, bool quoteValues = true)
                                 replaceString.arg(currentObject->id()));
         }
 
-        if (const World *world = WorldManager::instance().worldForMap(fileName)) {
-            finalString.replace(QLatin1String("%worldfile"), replaceString.arg(world->fileName));
+        if (auto worldDocument = WorldManager::instance().worldForMap(fileName)) {
+            finalString.replace(QLatin1String("%worldfile"), replaceString.arg(worldDocument->fileName()));
         }
     }
 
@@ -157,10 +156,12 @@ void Command::execute(bool inTerminal) const
     if (saveBeforeExecute) {
         ActionManager::instance()->action("Save")->trigger();
 
-        if (Document *document = DocumentManager::instance()->currentDocument())
-            if (document->type() == Document::MapDocumentType)
-                if (const World *world = WorldManager::instance().worldForMap(document->fileName()))
-                    WorldManager::instance().saveWorld(world->fileName);
+        if (Document *document = DocumentManager::instance()->currentDocument()) {
+            if (document->type() == Document::MapDocumentType) {
+                if (auto worldDocument = WorldManager::instance().worldForMap(document->fileName()))
+                    DocumentManager::instance()->saveDocument(worldDocument.data());
+            }
+        }
     }
 
     // Start the process
@@ -296,9 +297,7 @@ CommandProcess::CommandProcess(const Command &command, bool inTerminal, bool sho
     if (!finalWorkingDirectory.trimmed().isEmpty())
         setWorkingDirectory(finalWorkingDirectory);
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    start(mFinalCommand);
-#elif QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     QStringList args = QProcess::splitCommand(mFinalCommand);
     const QString executable = args.takeFirst();
     start(executable, args);

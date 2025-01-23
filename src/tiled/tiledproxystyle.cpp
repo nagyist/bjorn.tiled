@@ -20,11 +20,12 @@
 
 #include "tiledproxystyle.h"
 
-#include "utils.h"
-
 #include <QAbstractScrollArea>
 #include <QApplication>
 #include <QComboBox>
+#if QT_VERSION < QT_VERSION_CHECK(6, 6, 3)
+#include <QGroupBox>
+#endif
 #include <QMainWindow>
 #include <QPainter>
 #include <QPainterPath>
@@ -126,15 +127,10 @@ static const qreal baseDpi = 96;
 
 static qreal dpi(const QStyleOption *option)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     // Expect that QStyleOption::QFontMetrics::QFont has the correct DPI set
     if (option)
         return option->fontMetrics.fontDpi();
     return baseDpi;
-#else
-    Q_UNUSED(option)
-    return Utils::defaultDpi();
-#endif
 }
 
 static qreal dpiScaled(qreal value, qreal dpi)
@@ -351,7 +347,16 @@ void TiledProxyStyle::drawPrimitive(PrimitiveElement element,
     switch (element) {
     case PE_FrameGroupBox:
     {
-        int topMargin = qMax(pixelMetric(PM_ExclusiveIndicatorHeight), option->fontMetrics.height()) + 3;
+        int topMargin = 3;
+#if QT_VERSION < QT_VERSION_CHECK(6, 6, 3)
+        auto control = qobject_cast<const QGroupBox *>(widget);
+        if (control && !control->isCheckable() && control->title().isEmpty()) {
+            // Shrinking the topMargin if Not checkable AND title is empty
+        } else {
+            topMargin += qMax(pixelMetric(PM_ExclusiveIndicatorHeight),
+                              option->fontMetrics.height());
+        }
+#endif
         QRect frame = option->rect.adjusted(0, topMargin, -1, -1);
         QColor tabFrameColor = getTabFrameColor(option->palette);
 

@@ -1,6 +1,6 @@
 /*
  * editableproject.cpp
- * Copyright 2023, Chris Boehm AKA dogboydog
+ * Copyright 2023, dogboydog
  * Copyright 2023, Thorbjørn Lindeijer <bjorn@lindeijer.nl>
  *
  * This file is part of Tiled.
@@ -26,8 +26,9 @@
 namespace Tiled {
 
 EditableProject::EditableProject(ProjectDocument *projectDocument, QObject *parent)
-    : EditableAsset(projectDocument, &projectDocument->project(), parent)
+    : EditableAsset(&projectDocument->project(), parent)
 {
+    setDocument(projectDocument);
 }
 
 QString EditableProject::extensionsPath() const

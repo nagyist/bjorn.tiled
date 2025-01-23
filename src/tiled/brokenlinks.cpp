@@ -20,6 +20,7 @@
 
 #include "brokenlinks.h"
 
+#include "changeevents.h"
 #include "changetileimagesource.h"
 #include "documentmanager.h"
 #include "fileformat.h"
@@ -117,6 +118,9 @@ void BrokenLinksModel::setDocument(Document *document)
 
     if (mDocument) {
         if (auto mapDocument = qobject_cast<MapDocument*>(mDocument)) {
+            connect(mDocument, &Document::changed,
+                    this, &BrokenLinksModel::documentChanged);
+
             connect(mapDocument, &MapDocument::tilesetAdded,
                     this, &BrokenLinksModel::tilesetAdded);
             connect(mapDocument, &MapDocument::tilesetRemoved,
@@ -127,8 +131,6 @@ void BrokenLinksModel::setDocument(Document *document)
             for (const SharedTileset &tileset : mapDocument->map()->tilesets())
                 connectToTileset(tileset);
 
-            connect(DocumentManager::instance(), &DocumentManager::templateTilesetReplaced,
-                    this, &BrokenLinksModel::refresh);
         } else if (auto tilesetDocument = qobject_cast<TilesetDocument*>(mDocument)) {
             connectToTileset(tilesetDocument->tileset());
         }
@@ -304,15 +306,37 @@ QVariant BrokenLinksModel::headerData(int section, Qt::Orientation orientation, 
     return QVariant();
 }
 
+void BrokenLinksModel::documentChanged(const ChangeEvent &event)
+{
+    switch (event.type) {
+    case ChangeEvent::DocumentAboutToReload:
+        if (auto mapDocument = qobject_cast<MapDocument*>(mDocument)) {
+            for (const SharedTileset &tileset : mapDocument->map()->tilesets())
+                disconnectFromTileset(tileset);
+        }
+        break;
+    case ChangeEvent::DocumentReloaded:
+        refresh();
+
+        if (auto mapDocument = qobject_cast<MapDocument*>(mDocument)) {
+            for (const SharedTileset &tileset : mapDocument->map()->tilesets())
+                connectToTileset(tileset);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 void BrokenLinksModel::tileImageSourceChanged(Tile *tile)
 {
     auto matchesTile = [tile](const BrokenLink &link) {
         return link.type == TilesetTileImageSource && link._tile == tile;
     };
 
-    QVector<BrokenLink>::iterator it = std::find_if(mBrokenLinks.begin(),
-                                                    mBrokenLinks.end(),
-                                                    matchesTile);
+    auto it = std::find_if(mBrokenLinks.begin(),
+                           mBrokenLinks.end(),
+                           matchesTile);
 
     if (!tile->imageSource().isEmpty() && tile->imageStatus() == LoadingError) {
         if (it != mBrokenLinks.end()) {
@@ -533,11 +557,7 @@ void LinkFixer::tryFixLinks(const QVector<BrokenLink> &links)
     const auto entryList = dir.entryList(QDir::Files |
                                          QDir::Readable |
                                          QDir::NoDotAndDotDot);
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    const auto files = entryList.toSet();
-#else
     const QSet<QString> files { entryList.begin(), entryList.end() };
-#endif
 
     // See if any of the links we're looking for is located in this directory
     for (const BrokenLink &link : links) {

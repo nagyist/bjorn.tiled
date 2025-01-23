@@ -28,6 +28,7 @@
 
 #include "pluginmanager.h"
 #include "tmxrasterizer.h"
+#include "tmxmapformat.h"
 
 #include <QCommandLineParser>
 #include <QDebug>
@@ -52,6 +53,10 @@ int main(int argc, char *argv[])
     app.setApplicationVersion(QLatin1String("1.0"));
 
     PluginManager::instance()->loadPlugins();
+
+    // Necessary to enable loading of object templates in XML format
+    XmlObjectTemplateFormat xmlObjectTemplateFormat;
+    PluginManager::addObject(&xmlObjectTemplateFormat);
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QCoreApplication::translate("main", "Renders a Tiled map or world to an image."));
@@ -85,15 +90,21 @@ int main(int argc, char *argv[])
                             QCoreApplication::translate("main", "Don't render object layers.") },
                           { QStringLiteral("hide-image-layers"),
                             QCoreApplication::translate("main", "Don't render image layers.") },
-                          { QStringLiteral("advance-animations"),
-                            QCoreApplication::translate("main", "If used, tile animations are advanced by the specified duration."),
-                            QCoreApplication::translate("main", "duration") },
                           { QStringLiteral("hide-object"),
                             QCoreApplication::translate("main", "Specifies an object to omit from the output image. Can be repeated to hide multiple objects. If multiple objects share the specified name they all will be hidden."),
                             QCoreApplication::translate("main", "name") },
                           { QStringLiteral("show-object"),
                             QCoreApplication::translate("main", "If used only specified objects are shown. Can be repeated to show multiple specified objects only. If multiple objects share the specified name they all will be shown."),
-                            QCoreApplication::translate("main", "name") }
+                            QCoreApplication::translate("main", "name") },
+                          { QStringLiteral("advance-animations"),
+                            QCoreApplication::translate("main", "If used, tile animations are advanced by the specified duration in milliseconds."),
+                            QCoreApplication::translate("main", "duration") },
+                          { QStringLiteral("frames"),
+                            QCoreApplication::translate("main", "Number of frames to export. This will add a frame number suffix to the image names. Animations are advanced by <frame-duration> for each frame."),
+                            QCoreApplication::translate("main", "number") },
+                          { QStringLiteral("frame-duration"),
+                            QCoreApplication::translate("main", "Duration of each frame in milliseconds, defaults to 100."),
+                            QCoreApplication::translate("main", "number") },
                       });
     parser.addPositionalArgument(QStringLiteral("map|world"), QCoreApplication::translate("main", "Map or world file to render."));
     parser.addPositionalArgument(QStringLiteral("image"), QCoreApplication::translate("main", "Image file to output."));
@@ -153,6 +164,24 @@ int main(int argc, char *argv[])
         w.setAdvanceAnimations(parser.value(QLatin1String("advance-animations")).toInt(&ok));
         if (!ok || w.advanceAnimations() < 0) {
             qWarning().noquote() << QCoreApplication::translate("main", "Invalid advance-animations specified: \"%1\"").arg(parser.value(QLatin1String("advance-animations")));
+            exit(1);
+        }
+    }
+
+    if (parser.isSet(QLatin1String("frames"))) {
+        bool ok;
+        w.setFrameCount(parser.value(QLatin1String("frames")).toInt(&ok));
+        if (!ok || w.frameCount() < 0) {
+            qWarning().noquote() << QCoreApplication::translate("main", "Invalid number of frames specified: \"%1\"").arg(parser.value(QLatin1String("frames")));
+            exit(1);
+        }
+    }
+
+    if (parser.isSet(QLatin1String("frame-duration"))) {
+        bool ok;
+        w.setFrameDuration(parser.value(QLatin1String("frame-duration")).toInt(&ok));
+        if (!ok || w.frameDuration() < 0) {
+            qWarning().noquote() << QCoreApplication::translate("main", "Invalid frame-duration specified: \"%1\"").arg(parser.value(QLatin1String("frame-duration")));
             exit(1);
         }
     }

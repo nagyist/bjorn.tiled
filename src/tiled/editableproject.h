@@ -1,6 +1,6 @@
 /*
  * editableproject.h
- * Copyright 2023, Chris Boehm AKA dogboydog
+ * Copyright 2023, dogboydog
  * Copyright 2023, Thorbjørn Lindeijer <bjorn@lindeijer.nl>
  *
  * This file is part of Tiled.
@@ -43,6 +43,8 @@ public:
     EditableProject(ProjectDocument *projectDocument, QObject *parent = nullptr);
 
     bool isReadOnly() const override;
+    AssetType::Value assetType() const override { return AssetType::Project; }
+
     QString extensionsPath() const;
     QString automappingRulesFile() const;
     QString fileName() const;
@@ -59,5 +61,3 @@ inline Project *EditableProject::project() const
 }
 
 } // namespace Tiled
-
-Q_DECLARE_METATYPE(Tiled::EditableProject*)

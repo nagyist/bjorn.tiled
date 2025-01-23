@@ -24,7 +24,7 @@ Compatibility Version
 
 Extensions Directory
    A project-specific directory where you can put :doc:`Tiled extensions
-   </reference/scripting>`. It defaults to simply ``extensions``, so when you
+   </manual/scripting>`. It defaults to simply ``extensions``, so when you
    have a directory called "extensions" alongside your project file it will be
    picked up automatically.
 
@@ -70,8 +70,8 @@ just type the name of the file you'd like to open.
 
    There are many ways in which the projects could be made more powerful:
 
-   -  Make the project accessible through the :doc:`scripting API
-      </reference/scripting>`.
+   -  Make the custom types defined in the project accessible through the
+      :doc:`scripting API </manual/scripting>` (`#3419 <https://github.com/mapeditor/tiled/issues/3419>`__).
 
    -  Allow turning off features on a per-project basis, to simplify the UI
       and reduce the chance of accidentally doing something your project

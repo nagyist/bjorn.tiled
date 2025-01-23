@@ -25,17 +25,19 @@
 
 namespace Tiled {
 
+class ChangeEvent;
 class EditableTile;
 class EditableWangSet;
 class ScriptImage;
 class TilesetDocument;
 
-class EditableTileset : public EditableAsset
+class EditableTileset final : public EditableAsset
 {
     Q_OBJECT
 
     Q_PROPERTY(QString name READ name WRITE setName)
-    Q_PROPERTY(QString image READ image WRITE setImage)
+    Q_PROPERTY(QString image READ imageFileName WRITE setImageFileName) // deprecated
+    Q_PROPERTY(QString imageFileName READ imageFileName WRITE setImageFileName)
     Q_PROPERTY(QList<QObject*> tiles READ tiles)
     Q_PROPERTY(QList<QObject*> wangSets READ wangSets)
     Q_PROPERTY(int tileCount READ tileCount)
@@ -47,8 +49,8 @@ class EditableTileset : public EditableAsset
     Q_PROPERTY(int imageWidth READ imageWidth)
     Q_PROPERTY(int imageHeight READ imageHeight)
     Q_PROPERTY(QSize imageSize READ imageSize)
-    Q_PROPERTY(int tileSpacing READ tileSpacing)
-    Q_PROPERTY(int margin READ margin)
+    Q_PROPERTY(int tileSpacing READ tileSpacing WRITE setTileSpacing)
+    Q_PROPERTY(int margin READ margin WRITE setMargin)
     Q_PROPERTY(Alignment objectAlignment READ objectAlignment WRITE setObjectAlignment)
     Q_PROPERTY(TileRenderSize tileRenderSize READ tileRenderSize WRITE setTileRenderSize)
     Q_PROPERTY(FillMode fillMode READ fillMode WRITE setFillMode)
@@ -59,6 +61,7 @@ class EditableTileset : public EditableAsset
     Q_PROPERTY(bool collection READ isCollection)   // deprecated
     Q_PROPERTY(bool isCollection READ isCollection)
     Q_PROPERTY(QList<QObject*> selectedTiles READ selectedTiles WRITE setSelectedTiles)
+    Q_PROPERTY(Tileset::TransformationFlags transformationFlags READ transformationFlags WRITE setTransformationFlags)
 
 public:
     // Synchronized with Tiled::Alignment
@@ -97,6 +100,16 @@ public:
     };
     Q_ENUM(FillMode)
 
+    // Synchronized with Tileset::TransformationFlag
+    enum TransformationFlag {
+        NoTransformation        = 0,
+        AllowFlipHorizontally   = 1 << 0,
+        AllowFlipVertically     = 1 << 1,
+        AllowRotate             = 1 << 2,
+        PreferUntransformed     = 1 << 3,
+    };
+    Q_ENUM(TransformationFlag)
+
     Q_INVOKABLE explicit EditableTileset(const QString &name = QString(),
                                          QObject *parent = nullptr);
     explicit EditableTileset(const Tileset *tileset, QObject *parent = nullptr);
@@ -105,9 +118,10 @@ public:
     ~EditableTileset() override;
 
     bool isReadOnly() const final;
+    AssetType::Value assetType() const override { return AssetType::Tileset; }
 
     const QString &name() const;
-    QString image() const;
+    QString imageFileName() const;
     int tileCount() const;
     int columnCount() const;
     int nextTileId() const;
@@ -127,6 +141,7 @@ public:
     QColor transparentColor() const;
     QColor backgroundColor() const;
     bool isCollection() const;
+    Tileset::TransformationFlags transformationFlags() const;
 
     Q_INVOKABLE void loadFromImage(Tiled::ScriptImage *image,
                                    const QString &source = QString());
@@ -155,11 +170,13 @@ public:
 
 public slots:
     void setName(const QString &name);
-    void setImage(const QString &imageFilePath);
+    void setImageFileName(const QString &imageFilePath);
     void setTileWidth(int width);
     void setTileHeight(int height);
     void setTileSize(QSize size);
     void setTileSize(int width, int height);
+    void setTileSpacing(int tileSpacing);
+    void setMargin(int margin);
     void setColumnCount(int columnCount);
     void setObjectAlignment(Alignment objectAlignment);
     void setTileRenderSize(TileRenderSize tileRenderSize);
@@ -168,10 +185,15 @@ public slots:
     void setOrientation(Orientation orientation);
     void setTransparentColor(const QColor &color);
     void setBackgroundColor(const QColor &color);
+    void setTransformationFlags(Tileset::TransformationFlags flags);
+
+protected:
+    void setDocument(Document *document) override;
 
 private:
     bool tilesFromEditables(const QList<QObject*> &editableTiles, QList<Tile *> &tiles);
 
+    void documentChanged(const ChangeEvent &event);
     void attachTiles(const QList<Tile*> &tiles);
     void detachTiles(const QList<Tile*> &tiles);
     void detachWangSets(const QList<WangSet*> &wangSets);
@@ -196,7 +218,7 @@ inline const QString &EditableTileset::name() const
     return tileset()->name();
 }
 
-inline QString EditableTileset::image() const
+inline QString EditableTileset::imageFileName() const
 {
     return tileset()->imageSource().toString(QUrl::PreferLocalFile);
 }
@@ -296,6 +318,11 @@ inline bool EditableTileset::isCollection() const
     return tileset()->isCollection();
 }
 
+inline Tileset::TransformationFlags EditableTileset::transformationFlags() const
+{
+    return tileset()->transformationFlags();
+}
+
 inline Tileset *EditableTileset::tileset() const
 {
     return static_cast<Tileset*>(object());
@@ -322,5 +349,3 @@ inline void EditableTileset::setTileSize(int width, int height)
 }
 
 } // namespace Tiled
-
-Q_DECLARE_METATYPE(Tiled::EditableTileset*)

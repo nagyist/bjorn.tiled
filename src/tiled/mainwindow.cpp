@@ -56,7 +56,6 @@
 #include "newtilesetdialog.h"
 #include "offsetmapdialog.h"
 #include "projectdock.h"
-#include "projectdocument.h"
 #include "projectmanager.h"
 #include "projectpropertiesdialog.h"
 #include "propertytypeseditor.h"
@@ -69,8 +68,11 @@
 #include "tilesetdocument.h"
 #include "tileseteditor.h"
 #include "tilesetmanager.h"
+#include "tilestampmanager.h"
 #include "tmxmapformat.h"
 #include "utils.h"
+#include "world.h"
+#include "worlddocument.h"
 #include "worldmanager.h"
 #include "zoomable.h"
 
@@ -275,6 +277,7 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     ActionManager::registerAction(mUi->actionLabelsForAllObjects, "LabelsForAllObjects");
     ActionManager::registerAction(mUi->actionLabelsForSelectedObjects, "LabelsForSelectedObjects");
     ActionManager::registerAction(mUi->actionLoadWorld, "LoadWorld");
+    ActionManager::registerAction(mUi->actionUnloadAllWorlds, "UnloadAllWorlds");
     ActionManager::registerAction(mUi->actionMapProperties, "MapProperties");
     ActionManager::registerAction(mUi->actionNewMap, "NewMap");
     ActionManager::registerAction(mUi->actionNewProject, "NewProject");
@@ -356,9 +359,9 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     mUi->actionPaste->setShortcuts(QKeySequence::Paste);
     QList<QKeySequence> deleteKeys = QKeySequence::keyBindings(QKeySequence::Delete);
     deleteKeys.removeAll(Qt::Key_D | Qt::ControlModifier);  // used as "duplicate" shortcut
-#ifdef Q_OS_OSX
+#ifdef Q_OS_MACOS
     // Add the Backspace key as primary shortcut for Delete, which seems to be
-    // the expected one for OS X.
+    // the expected one for macOS.
     if (!deleteKeys.contains(QKeySequence(Qt::Key_Backspace)))
         deleteKeys.prepend(QKeySequence(Qt::Key_Backspace));
 #endif
@@ -597,23 +600,27 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
         if (!WorldManager::instance().loadWorld(worldFile, &errorString))
             QMessageBox::critical(this, tr("Error Loading World"), errorString);
         else
-            mLoadedWorlds = WorldManager::instance().worlds().keys();
+            mLoadedWorlds = WorldManager::instance().worldFileNames();
     });
     connect(mUi->menuUnloadWorld, &QMenu::aboutToShow, this, [this] {
         mUi->menuUnloadWorld->clear();
 
-        for (const World *world : WorldManager::instance().worlds()) {
-            QString text = world->fileName;
-            if (mDocumentManager->isWorldModified(world->fileName))
+        for (auto &worldDocument : WorldManager::instance().worlds()) {
+            QString text = worldDocument->fileName();
+            if (worldDocument->isModified())
                 text.append(QLatin1Char('*'));
 
-            mUi->menuUnloadWorld->addAction(text, this, [this, fileName = world->fileName] {
-                if (!confirmSaveWorld(fileName))
+            mUi->menuUnloadWorld->addAction(text, this, [this, worldDocument] {
+                if (!confirmSaveWorld(worldDocument.data()))
                     return;
 
-                WorldManager::instance().unloadWorld(fileName);
-                mLoadedWorlds = WorldManager::instance().worlds().keys();
+                WorldManager::instance().unloadWorld(worldDocument);
+                mLoadedWorlds = WorldManager::instance().worldFileNames();
             });
+        }
+        if (WorldManager::instance().worlds().count() >= 2) {
+            mUi->menuUnloadWorld->addSeparator();
+            mUi->menuUnloadWorld->addAction(mUi->actionUnloadAllWorlds);
         }
     });
     connect(mUi->actionNewWorld, &QAction::triggered, this, [this] {
@@ -640,24 +647,26 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
         if (!WorldManager::instance().addEmptyWorld(worldFile, &errorString))
             QMessageBox::critical(this, tr("Error Creating World"), errorString);
         else
-            mLoadedWorlds = WorldManager::instance().worlds().keys();
+            mLoadedWorlds = WorldManager::instance().worldFileNames();
     });
     connect(mUi->menuSaveWorld, &QMenu::aboutToShow, this, [this] {
         mUi->menuSaveWorld->clear();
 
-        for (const World *world : WorldManager::instance().worlds()) {
-            if (!mDocumentManager->isWorldModified(world->fileName))
+        for (auto &world : WorldManager::instance().worlds()) {
+            if (!world->isModified())
                 continue;
 
-            mUi->menuSaveWorld->addAction(world->fileName, this, [this, fileName = world->fileName] {
-                QString error;
-                if (!WorldManager::instance().saveWorld(fileName, &error))
-                    QMessageBox::critical(this, tr("Error Saving World"), error);
+            mUi->menuSaveWorld->addAction(world->fileName(), this, [this, world] {
+                mDocumentManager->saveDocument(world.data());
             });
         }
     });
+    connect(mUi->actionUnloadAllWorlds,  &QAction::triggered, this, [] {
+        WorldManager::instance().unloadAllWorlds();
+    });
     connect(mUi->menuWorld, &QMenu::aboutToShow, this, [this] {
         mUi->menuUnloadWorld->setEnabled(!WorldManager::instance().worlds().isEmpty());
+        mUi->actionUnloadAllWorlds->setEnabled(!WorldManager::instance().worlds().isEmpty());
         mUi->menuSaveWorld->setEnabled(DocumentManager::instance()->isAnyWorldModified());
     });
     connect(mUi->actionResizeMap, &QAction::triggered, this, &MainWindow::resizeMap);
@@ -1009,6 +1018,11 @@ void MainWindow::initializeSession()
     // adding the project's extension path.
     ScriptManager::instance().ensureInitialized();
 
+    // Load tile stamps (delayed so that potential custom types and file
+    // formats can be supported by stamps - which isn't perfect since there
+    // will still be issues when the project isn't open on startup)
+    TileStampManager::instance()->loadStamps();
+
     if (projectLoaded || Preferences::instance()->restoreSessionOnStartup())
         restoreSession();
 }
@@ -1027,21 +1041,21 @@ bool MainWindow::openFile(const QString &fileName, FileFormat *fileFormat)
         auto &worldManager = WorldManager::instance();
 
         QString errorString;
-        World *world = worldManager.loadWorld(fileName, &errorString);
-        if (!world) {
+        WorldDocumentPtr worldDocument = worldManager.loadWorld(fileName, &errorString);
+        if (!worldDocument) {
             QMessageBox::critical(this, tr("Error Loading World"), errorString);
             return false;
         } else {
-            mLoadedWorlds = worldManager.worlds().keys();
+            mLoadedWorlds = worldManager.worldFileNames();
 
             Document *document = mDocumentManager->currentDocument();
             if (document && document->type() == Document::MapDocumentType)
-                if (worldManager.worldForMap(document->fileName()) == world)
+                if (worldManager.worldForMap(document->fileName()) == worldDocument)
                     return true;
 
             // Try to open the first map in the world, if the current map
             // isn't already part of this world.
-            return openFile(world->firstMap());
+            return openFile(worldDocument->world()->firstMap());
         }
     }
 
@@ -1203,15 +1217,12 @@ void MainWindow::saveAll()
         }
     }
 
-    for (const World *world : WorldManager::instance().worlds()) {
-        if (!mDocumentManager->isWorldModified(world->fileName))
+    for (auto &worldDocument : WorldManager::instance().worlds()) {
+        if (!worldDocument->isModified())
             continue;
 
-        QString error;
-        if (!WorldManager::instance().saveWorld(world->fileName, &error)) {
-            QMessageBox::critical(this, tr("Error Saving World"), error);
+        if (!mDocumentManager->saveDocument(worldDocument.data()))
             return;
-        }
     }
 }
 
@@ -1246,33 +1257,26 @@ bool MainWindow::confirmAllSave()
             return false;
     }
 
-    for (const World *world : WorldManager::instance().worlds())
-        if (!confirmSaveWorld(world->fileName))
+    for (auto &worldDocument : WorldManager::instance().worlds())
+        if (!confirmSaveWorld(worldDocument.data()))
             return false;
 
     return true;
 }
 
-bool MainWindow::confirmSaveWorld(const QString &fileName)
+bool MainWindow::confirmSaveWorld(WorldDocument *worldDocument)
 {
-    if (!mDocumentManager->isWorldModified(fileName))
+    if (!worldDocument->isModified())
         return true;
 
     int ret = QMessageBox::warning(
             this, tr("Unsaved Changes to World"),
-            tr("There are unsaved changes to world \"%1\". Do you want to save the world now?").arg(fileName),
+            tr("There are unsaved changes to world \"%1\". Do you want to save the world now?").arg(worldDocument->fileName()),
             QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
 
     switch (ret) {
-    case QMessageBox::Save: {
-        QString error;
-        if (!WorldManager::instance().saveWorld(fileName, &error)) {
-            QMessageBox::critical(window(), tr("Error Saving World"), error);
-            return false;
-        }
-
-        return true;
-    }
+    case QMessageBox::Save:
+        return mDocumentManager->saveDocument(worldDocument);
     case QMessageBox::Discard:
         return true;
     case QMessageBox::Cancel:
@@ -1597,7 +1601,7 @@ void MainWindow::openProjectExtensionsPopup()
 
     auto label = new QLabel;
     label->setTextFormat(Qt::RichText);
-    label->setText(tr("The current project contains <a href=\"https://doc.mapeditor.org/en/stable/reference/scripting/\">scripted extensions</a>.<br><i>Make sure you trust those extensions before enabling them!</i>"));
+    label->setText(tr("The current project contains <a href=\"https://doc.mapeditor.org/en/stable/manual/scripting/\">scripted extensions</a>.<br><i>Make sure you trust those extensions before enabling them!</i>"));
     label->setOpenExternalLinks(true);
 
     auto enableButton = new QPushButton(tr("&Enable Extensions"));
@@ -2150,7 +2154,7 @@ void MainWindow::updateActions()
     mUi->actionExportAsImage->setEnabled(mapDocument);
     mUi->actionExport->setEnabled(mapDocument || tilesetDocument);
     mUi->actionExportAs->setEnabled(mapDocument || tilesetDocument);
-    mUi->actionReload->setEnabled(mapDocument || (tilesetDocument && tilesetDocument->canReload()));
+    mUi->actionReload->setEnabled(document && document->canReload());
     mUi->actionClose->setEnabled(document);
     mUi->actionCloseAll->setEnabled(document);
 
@@ -2322,9 +2326,8 @@ void MainWindow::retranslateUi()
 void MainWindow::exportMapAs(MapDocument *mapDocument)
 {
     SessionOption<QString> lastUsedExportFilter { "map.lastUsedExportFilter" };
-    QString fileName = mapDocument->fileName();
     QString selectedFilter = lastUsedExportFilter;
-    auto exportDetails = chooseExportDetails<MapFormat>(fileName,
+    auto exportDetails = chooseExportDetails<MapFormat>(mapDocument->fileName(),
                                                         mapDocument->lastExportFileName(),
                                                         selectedFilter,
                                                         this);

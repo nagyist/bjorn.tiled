@@ -33,6 +33,7 @@
 #include "changeselectedarea.h"
 #include "containerhelpers.h"
 #include "editablemap.h"
+#include "editor.h"
 #include "flipmapobjects.h"
 #include "geometry.h"
 #include "grouplayer.h"
@@ -67,6 +68,25 @@
 #include <QUndoStack>
 
 using namespace Tiled;
+
+class ReloadMap : public QUndoCommand
+{
+public:
+    ReloadMap(MapDocument *mapDocument, std::unique_ptr<Map> map)
+        : mMapDocument(mapDocument)
+        , mMap(std::move(map))
+    {
+        setText(QCoreApplication::translate("Undo Commands", "Reload Map"));
+    }
+
+    void undo() override { mMapDocument->swapMap(mMap); }
+    void redo() override { mMapDocument->swapMap(mMap); }
+
+private:
+    MapDocument *mMapDocument;
+    std::unique_ptr<Map> mMap;
+};
+
 
 MapDocument::MapDocument(std::unique_ptr<Map> map)
     : Document(MapDocumentType, map->fileName)
@@ -154,6 +174,42 @@ bool MapDocument::save(const QString &fileName, QString *error)
     }
 
     emit saved();
+    return true;
+}
+
+bool MapDocument::canReload() const
+{
+    return !fileName().isEmpty() && !mReaderFormat.isEmpty();
+}
+
+bool MapDocument::reload(QString *error)
+{
+    if (!canReload())
+        return false;
+
+    auto format = findFileFormat<MapFormat>(mReaderFormat, FileFormat::Read);
+    if (!format) {
+        if (error)
+            *error = tr("Map format '%s' not found").arg(mReaderFormat);
+        return false;
+    }
+
+    auto map = format->read(fileName());
+
+    if (!map) {
+        if (error)
+            *error = format->errorString();
+        return false;
+    }
+
+    map->fileName = fileName();
+
+    undoStack()->push(new ReloadMap(this, std::move(map)));
+    undoStack()->setClean();
+
+    mLastSaved = QFileInfo(fileName()).lastModified();
+    setChangedOnDisk(false);
+
     return true;
 }
 
@@ -270,6 +326,9 @@ void MapDocument::setSelectedLayers(const QList<Layer *> &layers)
 
     mSelectedLayers = layers;
     emit selectedLayersChanged();
+
+    if (currentObject() && currentObject()->typeId() == Object::LayerType)
+        emit currentObjectsChanged();
 }
 
 void MapDocument::switchCurrentLayer(Layer *layer)
@@ -634,7 +693,7 @@ void MapDocument::duplicateLayers(const QList<Layer *> &layers)
         }
 
         objectRefs.reassignIds(dup.clone);
-        dup.clone->setName(tr("Copy of %1").arg(dup.clone->name()));
+        dup.clone->setName(Editor::nameOfDuplicate(dup.clone->name()));
 
         duplications.append(dup);
     }
@@ -1075,6 +1134,55 @@ void MapDocument::paintTileLayers(const Map &map, bool mergeable,
     }
 }
 
+void MapDocument::eraseTileLayers(const QRegion &region,
+                                  bool allLayers,
+                                  bool mergeable,
+                                  const QString &customName)
+{
+    QList<QPair<QRegion, TileLayer*>> erasedRegions;
+
+    auto eraseCommand = std::make_unique<PaintTileLayer>(this);
+    eraseCommand->setText(customName.isEmpty() ? QCoreApplication::translate("Undo Commands", "Erase")
+                                               : customName);
+    eraseCommand->setMergeable(mergeable);
+
+    auto eraseOnLayer = [&] (TileLayer *tileLayer) {
+        if (!tileLayer->isUnlocked())
+            return;
+
+        QRegion eraseRegion = region.intersected(tileLayer->bounds());
+        if (eraseRegion.isEmpty())
+            return;
+
+        eraseCommand->erase(tileLayer, eraseRegion);
+
+        erasedRegions.append({ eraseRegion, tileLayer });
+    };
+
+    if (allLayers) {
+        for (Layer *layer : map()->tileLayers())
+            eraseOnLayer(static_cast<TileLayer*>(layer));
+    } else if (!selectedLayers().isEmpty()) {
+        for (Layer *layer : selectedLayers())
+            if (TileLayer *tileLayer = layer->asTileLayer())
+                eraseOnLayer(tileLayer);
+    } else if (auto tileLayer = dynamic_cast<TileLayer*>(currentLayer())) {
+        eraseOnLayer(tileLayer);
+    }
+
+    if (!erasedRegions.isEmpty())
+        undoStack()->push(eraseCommand.release());
+
+    for (auto &[region, tileLayer] : std::as_const(erasedRegions)) {
+        // Sanity check needed because a script might respond to the below
+        // signal by removing the layer from the map.
+        if (tileLayer->map() != map())
+            continue;
+
+        emit regionEdited(region, tileLayer);
+    }
+}
+
 void MapDocument::replaceObjectTemplate(const ObjectTemplate *oldObjectTemplate,
                                         const ObjectTemplate *newObjectTemplate)
 {
@@ -1172,8 +1280,10 @@ void MapDocument::setSelectedObjects(const QList<MapObject *> &selectedObjects)
     // Make sure the current object is one of the selected ones
     if (!selectedObjects.isEmpty()) {
         if (currentObject() && currentObject()->typeId() == Object::MapObjectType) {
-            if (selectedObjects.contains(static_cast<MapObject*>(currentObject())))
+            if (selectedObjects.contains(static_cast<MapObject*>(currentObject()))) {
+                emit currentObjectsChanged();
                 return;
+            }
         }
 
         setCurrentObject(selectedObjects.first());
@@ -1531,6 +1641,54 @@ void MapDocument::checkIssues()
     }
 }
 
+void MapDocument::swapMap(std::unique_ptr<Map> &other)
+{
+    // Store previous state
+    const int currentLayerId = currentLayer() ? currentLayer()->id() : -1;
+
+    QVector<int> selectedLayerIds;
+    for (const Layer *layer : selectedLayers())
+        selectedLayerIds.append(layer->id());
+
+    QVector<int> selectedObjectIds;
+    for (const MapObject *object : selectedObjects())
+        selectedObjectIds.append(object->id());
+
+    // Bring pointers to safety
+    setSelectedLayers({});
+    setSelectedObjects({});
+    setAboutToBeSelectedObjects({});
+    setHoveredMapObject(nullptr);
+    setCurrentLayer(nullptr);
+    setCurrentObject(nullptr);
+
+    emit changed(AboutToReloadEvent());
+
+    mMap.swap(other);
+    createRenderer();
+
+    emit changed(ReloadEvent());
+
+    // Restore previous state
+    QList<MapObject*> selectedObjects;
+    for (int id : selectedObjectIds) {
+        if (MapObject *object = mMap->findObjectById(id))
+            selectedObjects.append(object);
+    }
+    setSelectedObjects(selectedObjects);
+
+    if (currentLayerId != -1)
+        if (auto layer = mMap->findLayerById(currentLayerId))
+            switchCurrentLayer(layer);
+
+    QList<Layer*> selectedLayers;
+    for (int id : selectedLayerIds) {
+        if (Layer *layer = mMap->findLayerById(id))
+            selectedLayers.append(layer);
+    }
+    switchSelectedLayers(selectedLayers);
+}
+
 void MapDocument::updateTemplateInstances(const ObjectTemplate *objectTemplate)
 {
     QList<MapObject*> objectList;
@@ -1577,8 +1735,11 @@ void MapDocument::deselectObjects(const QList<MapObject *> &objects)
         removedAboutToBeSelectedObjects += mAboutToBeSelectedObjects.removeAll(object);
     }
 
-    if (removedSelectedObjects > 0)
+    if (removedSelectedObjects > 0) {
         emit selectedObjectsChanged();
+        if (mCurrentObject && mCurrentObject->typeId() == Object::MapObjectType)
+            emit currentObjectsChanged();
+    }
     if (removedAboutToBeSelectedObjects > 0)
         emit aboutToBeSelectedObjectsChanged(mAboutToBeSelectedObjects);
 }
@@ -1595,6 +1756,7 @@ void MapDocument::duplicateObjects(const QList<MapObject *> &objects)
 
     for (MapObject *mapObject : objects) {
         MapObject *clone = mapObject->clone();
+        clone->setName(Editor::nameOfDuplicate(clone->name()));
         objectRefs.reassignId(clone);
         objectsToAdd.append(AddMapObjects::Entry { clone, mapObject->objectGroup() });
         objectsToAdd.last().index = mapObject->objectGroup()->objects().indexOf(mapObject) + 1;

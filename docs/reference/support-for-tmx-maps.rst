@@ -17,7 +17,7 @@ rather pass on having to write their own tile map renderer.
 .. note::
 
    For updates to this page please open a pull request or issue
-   `on GitHub <https://github.com/bjorn/tiled/issues>`__, thanks!
+   `on GitHub <https://github.com/mapeditor/tiled/issues>`__, thanks!
 
 Support by Language
 -------------------
@@ -39,7 +39,7 @@ C++
 
 -  `C++/TinyXML based tmxparser <https://github.com/sainteos/tmxparser>`__ (BSD)
 -  C++/Qt based libtiled, used by Tiled itself and included at
-   `src/libtiled <https://github.com/bjorn/tiled/tree/master/src/libtiled>`__
+   `src/libtiled <https://github.com/mapeditor/tiled/tree/master/src/libtiled>`__
    (BSD)
 -  `C++11x/TinyXml2
    libtmx-parser <https://github.com/halsafar/libtmx-parser>`__ by
@@ -68,11 +68,14 @@ C++
 C#/.NET
 ~~~~~~~
 
--  `TiledCS <https://github.com/TheBoneJarmer/TiledCS>`__: A dotnet library for loading Tiled tilesets and maps (TMX/TSX or JSON).
+-  `DotTiled <https://github.com/dcronqvist/DotTiled>`__: A fast, memory-efficient, and easy to use .NET library for loading Tiled maps and tilesets with support for both TMX and JSON formats.
+-  `TiledLib <https://github.com/Ragath/TiledLib.Net>`__: Cross-platform Tiled map parsing utilities.
 -  `MonoGame.Extended <https://github.com/craftworkgames/MonoGame.Extended>`__
    has a Tiled map loader and renderer that works with MonoGame on all
    platforms that support portable class libraries.
 -  The following projects appear to be no longer maintained, but might still be useful:
+   `TiledCS <https://github.com/TheBoneJarmer/TiledCS>`__,
+   `TiledCSPlus <https://github.com/krnlexception/TiledCSPlus>`__,
    `TiledSharp <https://github.com/marshallward/TiledSharp>`__,
    `NTiled <https://github.com/patriksvensson/ntiled>`__,
    `tmx-mapper-pcl <https://github.com/aalmik/tmx-mapper-pcl>`__,
@@ -120,7 +123,7 @@ Java
 ~~~~
 
 -  A library for loading TMX files is included with Tiled at
-   `util/java/libtiled-java <https://github.com/bjorn/tiled/tree/master/util/java/libtiled-java>`__.
+   `util/java/libtiled-java <https://github.com/mapeditor/tiled/tree/master/util/java/libtiled-java>`__.
 -  `TiledReader <http://www.alexheyman.org/tiledreader/>`__ is a simple TMX reader that conveys the information in Tiled files via a hand-crafted class structure, but does not load image data.
 -  Android-Specific:
 
@@ -278,7 +281,7 @@ Godot
 - Tiled ships with a plugin for exporting to :ref:`Godot 4 <godot4-export>` as .tscn scene files.
 - `Tiled Map Importer <https://godotengine.org/asset-library/asset/25>`__ imports each map as Godot scene which can be instanced or inherited (`forum announcement <http://discourse.mapeditor.org/t/importer-plugin-for-godot-engine/1833/1>`__).
 - `Godot Tiled importer (Mono version) <https://github.com/mi-sts/godot_tiled_importer>`__ imports Tiled maps exported to JSON (.tmj) format. Supports all map orientations.
-- `Tiled To Godot Export <https://github.com/MikeMnD/tiled-to-godot-export>`__ is a Tiled :doc:`JavaScript extension </reference/scripting>` for exporting Tilemaps and Tilesets in Godot 3.2 format (`forum announcement <https://discourse.mapeditor.org/t/tiled-editor-map-and-tileset-integration-with-godot-3-2/4347>`__).
+- `Tiled To Godot Export <https://github.com/MikeMnD/tiled-to-godot-export>`__ is a Tiled :doc:`JavaScript extension </manual/scripting>` for exporting Tilemaps and Tilesets in Godot 3.2 format (`forum announcement <https://discourse.mapeditor.org/t/tiled-editor-map-and-tileset-integration-with-godot-3-2/4347>`__).
 
 Grid Engine
 ~~~~~~~~~~~
